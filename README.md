@@ -50,6 +50,27 @@ This is documentation of **your** code, not a substitute for implementation.
 
 ---
 
+## Architecture
+
+### How a transaction moves: wallet → mempool → block → UTXO set
+
+1. **Wallet** calls `Transaction.create(...)` picking UTXOs that cover the amount, building inputs (txId + outputIndex) and outputs (recipient + change). It then calls `tx.sign(privateKey, publicKey)` which signs the payload of each input and stores signatures + publicKey in `tx.signatures`.
+2. **Mempool** (`blockchain.addTransaction`) validates the tx against a snapshot of the UTXO set that already includes pending mempool transactions (preventing double-spends). If valid, the tx enters `Mempool.transactions`.
+3. **Mining** (`blockchain.minePendingTransactions`) prepends a coinbase tx (miner reward), collects pending txs, builds a `Block`, runs Proof-of-Work (`block.mine()`) incrementing the nonce until `hash.startsWith('0'.repeat(difficulty))`, then appends the block to the chain.
+4. **UTXO set** (`utxoSet.applyBlock`) processes every transaction in the new block: for non-coinbase txs, the spent inputs are deleted from the map; for all txs, the new outputs are inserted. `getBalance(address)` and `getUnspentForAddress(address)` query this map directly.
+
+### How PoW and difficulty adjustment work
+
+Each `Block.mine()` loop hashes `{ index, timestamp, merkleRoot, previousHash, nonce, difficulty }` via SHA-256 and increments the nonce until the hash has at least `difficulty` leading zero hex characters. `Block.isValid()` re-hashes all fields and checks both the hash match and the leading-zeros condition.
+
+Difficulty is re-evaluated every `DIFFICULTY_ADJUSTMENT_INTERVAL` blocks (5). At adjustment points `(chainLength - 1) % 5 === 0`, the elapsed time for the last 5 blocks is compared to `TARGET_BLOCK_TIME_MS * 5`. If blocks are mined in less than half the target time, difficulty increases by 1; if more than twice, it decreases by 1 (minimum 1).
+
+### How P2P chooses the canonical chain
+
+`P2PServer` wraps a WebSocket server. On connect, it immediately sends the local chain as a `CHAIN` message. On receiving a `CHAIN` message, it calls `blockchain.replaceChain(newChain)` which accepts only if the incoming chain is strictly longer AND every block passes `isValid(previousBlock)` (hash integrity, PoW, and merkle-root checks). When accepted, the UTXO set is rebuilt by replaying all blocks of the new chain. The mempool is cleared to avoid invalid pending transactions.
+
+---
+
 ## To-do list (check off as you complete)
 
 ### 1. Project setup
