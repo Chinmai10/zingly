@@ -1,36 +1,37 @@
-const { notImplemented } = require('../util/notImplemented');
-/** @see tests/unit/core/Mempool.test.js */
 class Mempool {
   constructor() {
     this.transactions = new Map();
   }
 
   add(transaction) {
-    notImplemented('Mempool.add');
+    if (transaction.isCoinbase()) throw new Error('Coinbase transactions cannot be added to mempool');
+    if (this.transactions.has(transaction.id)) throw new Error('Transaction already in mempool');
+    if (!transaction.verify()) throw new Error('Invalid transaction signature');
+    this.transactions.set(transaction.id, transaction);
   }
 
   remove(transactionId) {
-    notImplemented('Mempool.remove');
+    this.transactions.delete(transactionId);
   }
 
   removeMany(ids) {
-    notImplemented('Mempool.removeMany');
+    for (const id of ids) this.transactions.delete(id);
   }
 
   getPending(limit = 100) {
-    notImplemented('Mempool.getPending');
+    return Array.from(this.transactions.values()).slice(0, limit);
   }
 
   has(transactionId) {
-    notImplemented('Mempool.has');
+    return this.transactions.has(transactionId);
   }
 
   clear() {
-    notImplemented('Mempool.clear');
+    this.transactions.clear();
   }
 
   size() {
-    notImplemented('Mempool.size');
+    return this.transactions.size;
   }
 }
 
