@@ -1,11 +1,13 @@
-const { notImplemented } = require('../util/notImplemented');
-/** @see tests/storage/persistence.test.js */
+const { writeFile, readFile } = require('node:fs/promises');
+const { Blockchain } = require('../core/Blockchain');
+
 async function saveChain(filePath, blockchain) {
-  notImplemented('saveChain');
+  await writeFile(filePath, JSON.stringify(blockchain.toJSON(), null, 2), 'utf8');
 }
 
 async function loadChain(filePath, minerAddress) {
-  notImplemented('loadChain');
+  const data = JSON.parse(await readFile(filePath, 'utf8'));
+  return Blockchain.fromJSON(data, minerAddress);
 }
 
 module.exports = { saveChain, loadChain };

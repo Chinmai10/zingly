@@ -1,5 +1,9 @@
-const { notImplemented } = require('../util/notImplemented');
-/** @see tests/network/p2p.test.js */
+const { WebSocketServer, WebSocket } = require('ws');
+const { Block } = require('../core/Block');
+const { Transaction } = require('../core/Transaction');
+
+const MSG = { CHAIN: 'CHAIN', TRANSACTION: 'TRANSACTION', REQUEST_CHAIN: 'REQUEST_CHAIN' };
+
 class P2PServer {
   constructor(blockchain, port) {
     this.blockchain = blockchain;
@@ -9,35 +13,67 @@ class P2PServer {
   }
 
   listen() {
-    notImplemented('P2PServer.listen');
+    const wss = new WebSocketServer({ port: this.port });
+    const origClose = wss.close.bind(wss);
+    wss.close = (cb) => {
+      wss.clients.forEach(c => c.terminate());
+      origClose(cb);
+    };
+    this.server = wss;
+    wss.on('connection', (socket) => this.connectSocket(socket));
+    return this;
   }
 
   connectSocket(socket) {
-    notImplemented('P2PServer.connectSocket');
+    this.sockets.push(socket);
+    socket.on('message', (data) => this.handleMessage(socket, data));
+    socket.on('close', () => { this.sockets = this.sockets.filter(s => s !== socket); });
+    socket.on('error', () => {});
+    this.sendChain(socket);
   }
 
   connectToPeer(host, port) {
-    notImplemented('P2PServer.connectToPeer');
+    const ws = new WebSocket(`ws://${host}:${port}`);
+    ws.on('open', () => this.connectSocket(ws));
+    ws.on('error', () => {});
   }
 
   handleMessage(socket, data) {
-    notImplemented('P2PServer.handleMessage');
+    try {
+      const msg = JSON.parse(data);
+      if (msg.type === MSG.CHAIN) {
+        const chain = msg.chain.map(b => Block.fromJSON(b));
+        this.blockchain.replaceChain(chain);
+      } else if (msg.type === MSG.TRANSACTION) {
+        try {
+          const tx = Transaction.fromJSON(msg.transaction);
+          this.blockchain.addTransaction(tx);
+        } catch {}
+      } else if (msg.type === MSG.REQUEST_CHAIN) {
+        this.sendChain(socket);
+      }
+    } catch {}
   }
 
   broadcast(data) {
-    notImplemented('P2PServer.broadcast');
+    const msg = JSON.stringify(data);
+    for (const socket of this.sockets) {
+      if (socket.readyState === WebSocket.OPEN) socket.send(msg);
+    }
   }
 
   broadcastTransaction(transaction) {
-    notImplemented('P2PServer.broadcastTransaction');
+    this.broadcast({ type: MSG.TRANSACTION, transaction: transaction.toJSON() });
   }
 
   broadcastChain() {
-    notImplemented('P2PServer.broadcastChain');
+    this.broadcast({ type: MSG.CHAIN, chain: this.blockchain.chain.map(b => b.toJSON()) });
   }
 
   sendChain(socket) {
-    notImplemented('P2PServer.sendChain');
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: MSG.CHAIN, chain: this.blockchain.chain.map(b => b.toJSON()) }));
+    }
   }
 }
 
